@@ -1,0 +1,109 @@
+import React from 'react';
+import axios from 'axios';
+import Cookies from 'universal-cookie';
+
+class QueryResults extends React.Component {
+    constructor(props) {
+        super(props);
+        this.state = {
+            status: '',
+            runtime: 0,
+            isComplete: false,
+            isSaved: false,
+            downloadUrl: '',
+            cdrivePath: ''
+        }
+        this.handlePathChange = this.handlePathChange.bind(this);
+        this.handleStatusUpdate = this.handleStatusUpdate.bind(this);
+        this.saveToCdrive = this.saveToCdrive.bind(this);
+    }
+    componentDidMount() {
+        this.interval = setInterval(this.handleStatusUpdate, 1000);
+    }
+    componentWillUnmount() {
+        clearInterval(this.interval);
+    }
+    handleStatusUpdate() {
+        if(this.props.queryExecutionId === '') return (null);
+
+        const cookies = new Cookies();
+        const request = axios({
+            method: 'GET',
+            url: window.location.protocol + "//" + window.location.hostname + window.location.pathname + "api/query-status/?query_id=" + this.props.queryExecutionId + "&access_token=" + cookies.get('pquery_token'),
+        });
+        request.then(
+            response => {
+                if(response.data.state === 'SUCCEEDED') {
+                    clearInterval(this.interval);
+                    this.setState({
+                        status: response.data.state,
+                        runtime: response.data.runtime,
+                        isComplete: true,
+                        downloadUrl: response.data.downloadUrl
+                    });
+                } else {
+                    this.setState({
+                        status: response.data.state,
+                        runtime: typeof response.data.runtime === "undefined" ? 0 : response.data.runtime
+                    });
+                }
+            },
+        );
+    }
+    handlePathChange(event){
+      this.setState({cdrivePath: event.target.value});
+    }
+    saveToCdrive() {
+      const cookies = new Cookies();
+      const request = axios({
+        method: 'POST',
+        url: window.location.protocol + "//" + window.location.hostname + window.location.pathname + "api/save/",
+        data: {
+          access_token: cookies.get('columbus_token'),
+          download_url: this.state.downloadUrl,
+          path: this.state.cdrivePath
+        }
+      });
+      request.then(
+          response => {
+            this.setState({isSaved: true});
+          },
+      );
+    }
+    render() {
+        if(this.props.queryExecutionId === '') return (null);
+        let downloadLinks;
+        if(this.state.isComplete) {
+            downloadLinks = 
+              <div>
+                <a className="btn btn-primary btn-lg" href={this.state.downloadUrl}> Download to Local </a>
+                <div class="input-group mt-3">
+                  <input type="text" placeholder="Enter CDrive Path" value={this.state.cdrivePath} onChange={this.handlePathChange} />
+                  <div class="input-group-append">
+                    <button className="btn btn-primary btn-lg" onClick={this.saveToCdrive}> Save to CDrive </button> 
+                  </div>
+                </div>
+              </div> ;
+        } else {
+            downloadLinks = '';
+        }
+        let cdriveLink;
+        if(this.state.isSaved) {
+          cdriveLink = 
+            <div className="h5 mt-3 font-weight-normal" >
+              Saved! <a href="https://cdrive.columbusecosystem.com"> View in CDrive</a>
+            </div> ;
+        } else {
+        }
+        return(
+            <div>
+                <h1 className="h5 mb-3 font-weight-normal">Query Status: {this.state.status}</h1>
+                <h1 className="h5 mb-3 font-weight-normal">Elapsed Time: {this.state.runtime/1000 }s</h1>
+                {downloadLinks}
+                {cdriveLink}
+            </div>
+        );
+    }
+}
+
+export default QueryResults;
